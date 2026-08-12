@@ -1,5 +1,7 @@
 "use client";
 
+import toast from "react-hot-toast";
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
@@ -55,7 +57,7 @@ export default function ReviewModal({
 
   const handleAction = async (action: 'APPROVE' | 'REJECT') => {
     if (action === 'APPROVE' && (!views || Number(views) <= 0)) {
-      alert("Please enter a valid number of views to approve.");
+      toast.error("Please enter a valid number of views to approve.");
       return;
     }
     
@@ -72,14 +74,14 @@ export default function ReviewModal({
       });
       const data = await res.json();
       if (res.ok) {
-        alert(data.message);
+        toast.success(data.message);
         setIsOpen(false);
         router.refresh();
       } else {
-        alert(data.error);
+        toast.error(data.error);
       }
     } catch (err) {
-      alert("Error occurred");
+      toast.error("Error occurred");
     } finally {
       setLoading(false);
     }

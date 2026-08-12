@@ -60,9 +60,12 @@ model Campaign {
   id           String         @id @default(uuid()) @db.Uuid
   brand_id     String         @db.Uuid
   video_url    String
-  cpm_rate     Decimal        @db.Decimal(10, 2)
-  total_budget Decimal        @db.Decimal(10, 2)
-  status       CampaignStatus @default(ACTIVE)
+  cpm_rate         Decimal        @db.Decimal(10, 2)
+  total_budget     Decimal        @db.Decimal(10, 2)
+  reserved_budget  Decimal        @default(0.0) @db.Decimal(10, 2)
+  spent_budget     Decimal        @default(0.0) @db.Decimal(10, 2)
+  remaining_budget Decimal        @default(0.0) @db.Decimal(10, 2)
+  status           CampaignStatus @default(ACTIVE)
   start_date   DateTime?
   end_date     DateTime?
   created_at   DateTime       @default(now())
@@ -70,6 +73,9 @@ model Campaign {
 
   brand        User           @relation(fields: [brand_id], references: [id], onDelete: Cascade)
   submissions  Submission[]
+
+  @@index([brand_id])
+  @@index([status])
 }
 
 model Submission {
@@ -93,6 +99,10 @@ model Submission {
   campaign        Campaign         @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
   clipper         User             @relation(fields: [clipper_id], references: [id], onDelete: Cascade)
   transactions    TransactionLedger[]
+
+  @@index([campaign_id])
+  @@index([clipper_id])
+  @@index([status])
 }
 
 model TransactionLedger {
@@ -105,4 +115,8 @@ model TransactionLedger {
 
   user         User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
   submission   Submission?     @relation(fields: [reference_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([reference_id])
+  @@index([type])
 }

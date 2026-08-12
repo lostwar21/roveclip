@@ -76,10 +76,26 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       });
     }
 
-    // Calculate Gross and Net Payouts (20% Platform Fee)
-    const grossEarnings = (deltaViews / 1000) * Number(submission.campaign.cpm_rate);
-    const platformFee = grossEarnings * 0.20;
-    const netEarnings = grossEarnings - platformFee;
+    // Calculate Gross and Net Payouts (20% Platform Fee), bounded by remaining_budget
+    const cpmRate = Number(submission.campaign.cpm_rate);
+    const remainingBudget = Number(submission.campaign.remaining_budget);
+    
+    let theoreticalGross = (deltaViews / 1000) * cpmRate;
+    let actualGross = Math.min(theoreticalGross, remainingBudget);
+
+    if (actualGross <= 0) {
+      // Auto-complete campaign if budget is effectively zero
+      if (remainingBudget <= 0 && submission.campaign.status === 'ACTIVE') {
+        await prisma.campaign.update({
+          where: { id: submission.campaign.id },
+          data: { status: 'COMPLETED' }
+        });
+      }
+      return NextResponse.json({ error: "Kampanye ini sudah kehabisan anggaran (budget). Tidak ada pencairan baru." }, { status: 400 });
+    }
+
+    const platformFee = actualGross * 0.20;
+    const netEarnings = actualGross - platformFee;
 
     // Deteksi platform video kampanye Brand dan tarik judulnya secara otomatis
     let campaignTitle = "";
@@ -114,14 +130,14 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       aiRelevanceScore = aiResult.relevance_score;
 
       if (aiResult.approved && aiResult.relevance_score >= 75) {
-        console.log(`[AI APPROVED] Claim of $${grossEarnings.toFixed(2)} approved automatically. Score: ${aiResult.relevance_score}/100. Reason: ${aiResult.reason}`);
+        console.log(`[AI APPROVED] Claim of Rp${actualGross.toFixed(2)} approved automatically. Score: ${aiResult.relevance_score}/100. Reason: ${aiResult.reason}`);
         // Let it fall through to process auto-approve!
       } else {
         const flagReason = aiResult.relevance_score < 75 
           ? `Skor relevansi AI terlalu rendah (${aiResult.relevance_score}/100). ${aiResult.reason}`
           : aiResult.reason;
 
-        console.log(`[AI FLAGGED] Claim of $${grossEarnings.toFixed(2)} flagged. Reason: ${flagReason}`);
+        console.log(`[AI FLAGGED] Claim of Rp${actualGross.toFixed(2)} flagged. Reason: ${flagReason}`);
         
         await prisma.submission.update({
           where: { id: submission.id },
@@ -144,20 +160,17 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       console.log(`[AI BYPASSED] Video relevance verified at submission time: ${submission.relevance_score}/100.`);
     }
 
-    // Fetch brand balance to ensure they have enough funds
-    const brand = await prisma.user.findUnique({
-      where: { id: submission.campaign.brand_id },
-      select: { wallet_balance: true }
-    });
-
-    if (!brand || Number(brand.wallet_balance) < grossEarnings) {
-      return NextResponse.json({ error: "Brand has insufficient wallet balance to pay for these views." }, { status: 400 });
-    }
+    // Update the transaction logic to rely on Campaign budgets instead of direct brand wallet subtraction
+    const updatedStatus = (remainingBudget - actualGross <= 0) ? 'COMPLETED' : submission.campaign.status;
 
     // Auto-Approve Atomic Transaction
     await prisma.$transaction([
+      // Update Submission
       prisma.submission.update({
-        where: { id: submission.id },
+        where: { 
+          id: submission.id,
+          validated_views: submission.validated_views // Idempotency check: ensures views haven't been updated concurrently
+        },
         data: { 
           validated_views: liveViews, 
           snapshot_date: new Date(), 
@@ -167,10 +180,15 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           comments: stats.comments
         }
       }),
-      // Brand is charged the full gross amount
-      prisma.user.update({
-        where: { id: submission.campaign.brand_id },
-        data: { wallet_balance: { decrement: grossEarnings } }
+      // Deduct from Campaign Budgets instead of brand wallet
+      prisma.campaign.update({
+        where: { id: submission.campaign.id },
+        data: {
+          reserved_budget: { decrement: actualGross },
+          remaining_budget: { decrement: actualGross },
+          spent_budget: { increment: actualGross },
+          status: updatedStatus
+        }
       }),
       // Clipper receives the net amount (80%)
       prisma.user.update({
@@ -186,16 +204,16 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           reference_id: submission.id
         }
       }),
-      // Ledger: Brand's Spend (recorded as negative PAYOUT)
+      // Ledger: Brand's Spend (recorded against brand to show usage)
       prisma.transactionLedger.create({
         data: {
           user_id: submission.campaign.brand_id,
-          amount: -grossEarnings,
+          amount: -actualGross,
           type: 'PAYOUT',
           reference_id: submission.id
         }
       }),
-      // Ledger: Platform Fee (We can associate this fee record to the Clipper to show what was deducted)
+      // Ledger: Platform Fee
       prisma.transactionLedger.create({
         data: {
           user_id: submission.clipper_id,
@@ -207,7 +225,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     ]);
 
     return NextResponse.json({ 
-      message: `Successfully claimed $${netEarnings.toFixed(2)} (Net) for ${deltaViews.toLocaleString()} new views! Platform fee: $${platformFee.toFixed(2)}`,
+      message: `Berhasil klaim Rp${netEarnings.toLocaleString('id-ID')} (Net) untuk ${deltaViews.toLocaleString()} views baru! Biaya platform: Rp${platformFee.toLocaleString('id-ID')}`,
       status: "APPROVED",
       amount: netEarnings
     });

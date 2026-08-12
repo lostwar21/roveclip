@@ -69,18 +69,14 @@ export async function POST(req: Request) {
         console.error("YouTube oEmbed Error", err);
       }
     } else {
-      // INSTAGRAM: Simulasi identitas Akun Sosial (Anti-Theft)
+      // INSTAGRAM: Best-effort extraction without official oEmbed token
       const clipperName = (session.user as any).name;
+      const urlParts = social_url.split("/");
+      const possibleUsername = urlParts[urlParts.length - 2] || urlParts[urlParts.length - 1]; // e.g. instagram.com/username/reel/...
       
-      // Jika URL mengandung "curi" atau "steal", simulasikan video milik orang lain (kasus fraud)
-      if (social_url.toLowerCase().includes("curi") || social_url.toLowerCase().includes("steal")) {
-        author_name = "AkunOrangLain";
-        author_url = "https://instagram.com/akunoranglain";
-      } else {
-        author_name = `@${clipperName.toLowerCase().replace(/\s+/g, '')}`;
-        author_url = `https://instagram.com/${clipperName.toLowerCase().replace(/\s+/g, '')}`;
-      }
-      verified = true;
+      author_name = `@${possibleUsername}`;
+      author_url = `https://instagram.com/${possibleUsername}`;
+      verified = true; // Rely on AI and scrape Instagram stats to validate authenticity later
     }
 
     // Jika gagal terverifikasi hashtag-nya, tolak langsung!
@@ -90,12 +86,19 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    // Fetch the campaign details to get the brand video URL
+    // Fetch the campaign details to get the brand video URL and validate status
     const campaign = await prisma.campaign.findUnique({
       where: { id: campaign_id }
     });
+    
     if (!campaign) {
       return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    }
+
+    if (campaign.status !== 'ACTIVE') {
+      return NextResponse.json({ 
+        error: `Campaign ini sudah tidak aktif (Status: ${campaign.status}). Anda tidak dapat mendaftarkan video ke campaign yang sudah berakhir atau di-pause.` 
+      }, { status: 400 });
     }
 
     // Scrape Clipper Video Stats (Caption, likes, views)
@@ -132,36 +135,24 @@ export async function POST(req: Request) {
       platform
     );
 
-    // Jika AI mendeteksi Spam
-    if (aiResult.is_spam) {
-      return NextResponse.json({
-        error: `PENDAFTARAN DITOLAK AI: Konten video Anda terindikasi spam/bot. Alasan: ${aiResult.reason}`
-      }, { status: 400 });
+    let finalStatus: 'PENDING' | 'MANUAL_REVIEW' = 'PENDING';
+    let aiNotes = `Lolos seleksi AI awal: ${aiResult.reason}`;
+
+    if (!aiResult.approved || aiResult.is_spam || aiResult.sentiment === "NEGATIVE" || aiResult.relevance_score < 75) {
+        finalStatus = 'MANUAL_REVIEW';
+        aiNotes = `🚨 Ditahan AI: ${aiResult.reason} (Skor: ${aiResult.relevance_score}, Spam: ${aiResult.is_spam}, Sentiment: ${aiResult.sentiment})`;
     }
 
-    // Jika AI mendeteksi Sentimen Negatif
-    if (aiResult.sentiment === "NEGATIVE") {
-      return NextResponse.json({
-        error: `PENDAFTARAN DITOLAK AI: Dilarang menggunakan bahasa yang menghina atau merendahkan produk/Brand kampanye. (Sentimen Negatif terdeteksi). Alasan: ${aiResult.reason}`
-      }, { status: 400 });
-    }
-
-    // Jika AI Relevance Score < 75
-    if (aiResult.relevance_score < 75) {
-      return NextResponse.json({
-        error: `PENDAFTARAN DITOLAK AI: Konten video Anda tidak relevan dengan kriteria kampanye Brand (Skor: ${aiResult.relevance_score}/100). Alasan: ${aiResult.reason}`
-      }, { status: 400 });
-    }
-
-    // Jika lolos seleksi AI, buat data submission di database
+    // Buat data submission di database terlepas dari hasil AI, sehingga tidak ada data yang hilang
     const submission = await prisma.submission.create({
       data: {
         campaign_id,
         clipper_id: (session.user as any).id,
         platform,
         social_url,
+        status: finalStatus,
         relevance_score: aiResult.relevance_score,
-        ai_notes: `Lolos seleksi AI awal: ${aiResult.reason}`,
+        ai_notes: aiNotes,
         likes: clipperStats.likes,
         comments: clipperStats.comments,
         author_name,
@@ -169,7 +160,12 @@ export async function POST(req: Request) {
       }
     });
 
-    return NextResponse.json(submission);
+    return NextResponse.json({
+      message: finalStatus === 'MANUAL_REVIEW' 
+        ? "Video berhasil didaftarkan namun memerlukan tinjauan manual dari Admin (Ditahan AI)." 
+        : "Video berhasil didaftarkan!",
+      submission
+    });
   } catch (error) {
     console.error("Submission Error", error);
     return NextResponse.json({ error: "Failed to submit link" }, { status: 500 });

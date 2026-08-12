@@ -1,5 +1,7 @@
 "use client";
 
+import toast from "react-hot-toast";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -24,15 +26,15 @@ export default function CreateCampaignModal() {
       });
       const data = await res.json();
       if (res.ok) {
-        alert("Kampanye berhasil dibuat!");
+        toast.success("Kampanye berhasil dibuat!");
         setIsOpen(false);
         setFormData({ video_url: "", cpm_rate: "", total_budget: "" });
         router.refresh();
       } else {
-        alert(data.error || "Terjadi kesalahan.");
+        toast.error(data.error || "Terjadi kesalahan.");
       }
     } catch {
-      alert("Terjadi kesalahan.");
+      toast.error("Terjadi kesalahan.");
     } finally {
       setLoading(false);
     }

@@ -33,15 +33,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Insufficient wallet balance for this total budget" }, { status: 400 });
     }
 
-    const campaign = await prisma.campaign.create({
-      data: {
-        brand_id: userId,
-        video_url,
-        cpm_rate: cpm,
-        total_budget: budget,
-        status: 'ACTIVE'
-      }
-    });
+    // Atomic Transaction: Create Campaign, Deduct Brand Wallet, Log to Ledger
+    const [campaign] = await prisma.$transaction([
+      prisma.campaign.create({
+        data: {
+          brand_id: userId,
+          video_url,
+          cpm_rate: cpm,
+          total_budget: budget,
+          reserved_budget: budget,
+          remaining_budget: budget,
+          status: 'ACTIVE'
+        }
+      }),
+      prisma.user.update({
+        where: { id: userId },
+        data: { wallet_balance: { decrement: budget } }
+      }),
+      prisma.transactionLedger.create({
+        data: {
+          user_id: userId,
+          amount: -budget,
+          type: 'PAYOUT', // Represents funds moving out of active wallet to campaign reserve
+        }
+      })
+    ]);
 
     return NextResponse.json({ 
       message: "Campaign created successfully!",

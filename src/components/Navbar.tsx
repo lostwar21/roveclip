@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { IconBag, IconGrid, IconLogOut, IconLogin, IconX, IconMenu } from "@/components/Icons";
 
 export default function Navbar({ user, walletBalance, dashboardUrl }: { user: any; walletBalance: number; dashboardUrl: string }) {

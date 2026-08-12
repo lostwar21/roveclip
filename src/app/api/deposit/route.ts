@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     ]);
 
     return NextResponse.json({ 
-      message: `Successfully deposited $${depositAmount.toFixed(2)} to your wallet! (Simulated)`
+      message: `Berhasil deposit Rp${depositAmount.toLocaleString('id-ID')} ke wallet Anda! (Simulated)`
     });
 
   } catch (error) {

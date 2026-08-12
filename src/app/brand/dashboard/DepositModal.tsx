@@ -1,5 +1,7 @@
 "use client";
 
+import toast from "react-hot-toast";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -22,15 +24,15 @@ export default function DepositModal() {
       });
       const data = await res.json();
       if (res.ok) {
-        alert(data.message || "Top up berhasil!");
+        toast.success(data.message || "Top up berhasil!");
         setIsOpen(false);
         setAmount("");
         router.refresh();
       } else {
-        alert(data.error || "Gagal melakukan top up.");
+        toast.error(data.error || "Gagal melakukan top up.");
       }
     } catch {
-      alert("Terjadi kesalahan.");
+      toast.error("Terjadi kesalahan.");
     } finally {
       setLoading(false);
     }

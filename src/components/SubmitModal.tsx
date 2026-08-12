@@ -1,5 +1,7 @@
 "use client";
 
+import toast from "react-hot-toast";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -28,13 +30,13 @@ export default function SubmitModal({ campaignId }: { campaignId: string }) {
       const data = await res.json();
       if (res.ok) {
         setIsOpen(false);
-        alert("Berhasil! Video kamu sudah terdaftar dan sedang diaudit oleh AI.");
+        toast.success(data.message || "Berhasil! Video kamu sudah terdaftar dan sedang diaudit oleh AI.");
         router.push("/clipper/dashboard");
       } else {
-        alert(data.error || "Gagal submit. Pastikan link benar dan kamu sudah login.");
+        toast.error(data.error || "Gagal submit. Pastikan link benar dan kamu sudah login.");
       }
     } catch {
-      alert("Terjadi kesalahan saat submit.");
+      toast.error("Terjadi kesalahan saat submit.");
     } finally {
       setLoading(false);
     }

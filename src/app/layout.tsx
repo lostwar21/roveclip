@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { Toaster } from "react-hot-toast";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -43,6 +44,16 @@ export default async function RootLayout({
     <html lang="id" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-[#070b13] text-[#f8fafc] font-sans pb-16 md:pb-0">
         <Providers>
+          <Toaster 
+            position="bottom-right" 
+            toastOptions={{
+              style: {
+                background: '#1f2937',
+                color: '#fff',
+                border: '1px solid #374151'
+              }
+            }} 
+          />
 
           <Navbar user={user} walletBalance={walletBalance} dashboardUrl={dashboardUrl} />
 

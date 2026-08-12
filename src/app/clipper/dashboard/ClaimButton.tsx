@@ -1,4 +1,6 @@
 "use client";
+
+import toast from "react-hot-toast";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -15,10 +17,10 @@ export default function ClaimButton({ submissionId, status }: { submissionId: st
     try {
       const res = await fetch(`/api/submissions/${submissionId}/claim`, { method: "POST" });
       const data = await res.json();
-      alert(data.message || data.error || "Claim processed!");
+      toast.success(data.message || data.error || "Claim processed!");
       router.refresh();
     } catch (e) {
-      alert("Error processing claim");
+      toast.error("Error processing claim");
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,7 @@
 "use client";
 
+import toast from "react-hot-toast";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -9,7 +11,7 @@ export default function WithdrawButton({ balance }: { balance: number }) {
 
   const handleWithdraw = async () => {
     if (balance <= 0) {
-      alert("Insufficient balance to withdraw.");
+      toast.error("Insufficient balance to withdraw.");
       return;
     }
 
@@ -25,13 +27,13 @@ export default function WithdrawButton({ balance }: { balance: number }) {
 
       const data = await res.json();
       if (res.ok) {
-        alert(data.message);
+        toast.success(data.message);
         router.refresh();
       } else {
-        alert(data.error || "Failed to withdraw");
+        toast.error(data.error || "Failed to withdraw");
       }
     } catch (e) {
-      alert("Error occurred");
+      toast.error("Error occurred");
     } finally {
       setLoading(false);
     }

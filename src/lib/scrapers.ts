@@ -96,6 +96,64 @@ export async function scrapeYouTube(url: string): Promise<ScrapedStats> {
   }
 }
 
+export async function scrapeInstagram(url: string): Promise<ScrapedStats> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": USER_AGENT,
+        "Accept-Language": "en-US,en;q=0.9"
+      }
+    });
+
+    if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+    const html = await res.text();
+
+    // Strategy 1: Open Graph tags / meta description which usually contains "Likes, Comments - Author on Instagram: Caption"
+    const metaDescMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i) || html.match(/<meta\s+name="description"\s+content="([^"]+)"/i);
+    
+    let likes = 0;
+    let comments = 0;
+    let views = 0; // IG often doesn't show views on og meta, might just be likes.
+
+    if (metaDescMatch) {
+      const desc = metaDescMatch[1].replace(/,/g, ''); // "1000 Likes 20 Comments - Name on Instagram"
+      const likesMatch = desc.match(/([\d\.]+)\s+Likes/i);
+      const commentsMatch = desc.match(/([\d\.]+)\s+Comments/i);
+      if (likesMatch) likes = parseInt(likesMatch[1].replace(/\./g, ''), 10);
+      if (commentsMatch) comments = parseInt(commentsMatch[1].replace(/\./g, ''), 10);
+    }
+
+    // Instagram video views might be hidden in sharedData json if not login walled
+    const sharedDataMatch = html.match(/window\._sharedData\s*=\s*(\{.*?\});/);
+    if (sharedDataMatch) {
+        try {
+            const data = JSON.parse(sharedDataMatch[1]);
+            const post = data.entry_data?.PostPage?.[0]?.graphql?.shortcode_media;
+            if (post) {
+               views = post.video_view_count || views;
+               likes = post.edge_media_preview_like?.count || likes;
+               comments = post.edge_media_to_parent_comment?.count || comments;
+            }
+        } catch (e) {
+             // Ignore json parse error, fall back to meta tags
+        }
+    }
+
+    const titleMatch = html.match(/<title>(.*?)<\/title>/i);
+    const caption = titleMatch ? titleMatch[1] : (metaDescMatch ? metaDescMatch[1] : "");
+
+    // Require at least views or likes to consider it a successful scrape, otherwise assume login wall hit
+    if (views === 0 && likes === 0) {
+        throw new Error("Data tersembunyi oleh Login Wall Instagram.");
+    }
+
+    return { views: views > 0 ? views : likes, likes, comments, caption }; // fallback views to likes if views not found
+  } catch (error) {
+    console.error("Error scraping Instagram:", error);
+    throw new Error("Unable to parse Instagram video statistics. Platform requires login or API access.");
+  }
+}
+
 export async function scrapeSocialVideo(url: string, platform: string): Promise<ScrapedStats> {
   const plat = platform.toUpperCase();
   if (plat === 'TIKTOK') {
@@ -103,21 +161,7 @@ export async function scrapeSocialVideo(url: string, platform: string): Promise<
   } else if (plat === 'YOUTUBE') {
     return scrapeYouTube(url);
   } else {
-    // Bypass/mock untuk Instagram agar mudah ditesting
-    const lowerUrl = url.toLowerCase();
-    let caption = "Mencoba sepatu baru dari campaign ini! Bagus banget kualitasnya. #RoveCampaign";
-    
-    if (lowerUrl.includes("kantin") || lowerUrl.includes("gagal") || lowerUrl.includes("food") || lowerUrl.includes("recipe") || lowerUrl.includes("culinary")) {
-      caption = "makanan fav kalian di kantin apa? komen dong #cooking #food";
-    } else if (lowerUrl.includes("programming") || lowerUrl.includes("coding") || lowerUrl.includes("mobile") || lowerUrl.includes("tutorial")) {
-      caption = "Belajar tentang akses file lokal dan database SQLite pada pemograman mobile android #RoveCampaign";
-    }
-
-    return {
-      views: Math.floor(Math.random() * 50000) + 15000,
-      likes: Math.floor(Math.random() * 2000) + 500,
-      comments: 0,
-      caption
-    };
+    // INSTAGRAM
+    return scrapeInstagram(url);
   }
 }

@@ -1,4 +1,6 @@
 "use client";
+
+import toast from "react-hot-toast";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -26,13 +28,13 @@ export default function Register() {
       });
       const data = await res.json();
       if (res.ok) {
-        alert("Pendaftaran berhasil! Silakan masuk dengan akun baru kamu.");
+        toast.success("Pendaftaran berhasil! Silakan masuk dengan akun baru kamu.");
         router.push("/masuk");
       } else {
-        setError(data.error || "Pendaftaran gagal. Coba lagi.");
+        toast.error(data.error || "Gagal mendaftar");
       }
     } catch {
-      setError("Terjadi kesalahan. Coba beberapa saat lagi.");
+      toast.error("Terjadi kesalahan.");
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,7 @@
 "use client";
 
+import toast from "react-hot-toast";
+
 import { useState } from "react";
 
 export default function LiveCheckButton({ url, platform }: { url: string, platform: string }) {
@@ -14,10 +16,10 @@ export default function LiveCheckButton({ url, platform }: { url: string, platfo
       if (res.ok) {
         setViews(data.views);
       } else {
-        alert(data.error || "Failed to fetch views");
+        toast.error(data.error || "Failed to fetch views");
       }
     } catch (e) {
-      alert("Error fetching views");
+      toast.error("Error fetching views");
     } finally {
       setLoading(false);
     }

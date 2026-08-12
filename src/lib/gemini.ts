@@ -83,8 +83,25 @@ You MUST respond with a JSON object in this EXACT format (no markdown tags):
       throw new Error("Empty response from Gemini API");
     }
 
-    const result: AIReviewResult = JSON.parse(responseText.trim());
-    return result;
+    let result: any;
+    try {
+      result = JSON.parse(responseText.trim());
+    } catch (e) {
+      throw new Error("Invalid JSON format from AI");
+    }
+
+    // Runtime Schema Validation
+    if (
+      typeof result.approved !== 'boolean' ||
+      typeof result.relevance_score !== 'number' ||
+      typeof result.is_spam !== 'boolean' ||
+      typeof result.reason !== 'string' ||
+      !['POSITIVE', 'NEUTRAL', 'NEGATIVE'].includes(result.sentiment)
+    ) {
+      throw new Error("AI response does not match the required schema");
+    }
+
+    return result as AIReviewResult;
 
   } catch (error) {
     console.error("Gemini AI Review Error:", error);

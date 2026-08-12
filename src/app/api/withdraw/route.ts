@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     ]);
 
     return NextResponse.json({ 
-      message: `Successfully transferred $${amountToWithdraw.toFixed(2)} to your linked bank account! (Simulated)`
+      message: `Berhasil mentransfer Rp${amountToWithdraw.toLocaleString('id-ID')} ke rekening bank Anda! (Simulated)`
     });
 
   } catch (error) {
