@@ -2,8 +2,8 @@ import prisma from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { scrapeSocialVideo } from "@/lib/scrapers";
 import { reviewSubmissionWithAI } from "@/lib/gemini";
+import { verifyMediaSubmission } from "@/lib/social/verifier";
 
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -25,38 +25,50 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       return NextResponse.json({ message: "Claim is currently under manual review by Admin." }, { status: 400 });
     }
 
-    // Fetch live views using our self-hosted scraper
-    let liveViews = 0;
-    let stats: any = null;
-    try {
-      stats = await scrapeSocialVideo(submission.social_url, submission.platform);
+    // Fetch live views using our Hybrid Verification Engine (API + Scraper Fallback)
+    const verification = await verifyMediaSubmission(submission, (session.user as any).id);
 
-      if (stats.views === null) {
-        await prisma.submission.update({
-          where: { id: submission.id },
-          data: {
-            status: "MANUAL_REVIEW",
-            snapshot_date: new Date(),
-            ai_notes:
-              "Platform tidak menyediakan metrik views yang dapat diverifikasi secara otomatis pada request publik ini.",
-            likes: stats.likes ?? 0,
-            comments: stats.comments ?? 0,
-          },
-        });
-
-        return NextResponse.json({
-          status: "MANUAL_REVIEW",
-          message:
-            "Views video tidak dapat diverifikasi secara otomatis. Submission diteruskan ke review manual.",
-        });
+    // Save verification snapshot for audit trails
+    await prisma.verificationSnapshot.create({
+      data: {
+        submission_id: submission.id,
+        source: verification.source,
+        status: verification.status,
+        media_id: verification.mediaId,
+        owner_verified: verification.ownerVerified,
+        views: verification.views,
+        likes: verification.likes,
+        comments: verification.comments,
+        reach: verification.reach,
+        reason: verification.reason,
       }
+    });
 
-      liveViews = stats.views;
-    } catch (err) {
-      return NextResponse.json({ 
-        error: "Gagal menghubungi server platform video. Pastikan link video publik dan coba lagi beberapa saat." 
-      }, { status: 400 });
+    if (verification.views === null || verification.status === "UNAVAILABLE" || verification.status === "AUTH_REQUIRED" || verification.status === "PERMISSION_DENIED") {
+      await prisma.submission.update({
+        where: { id: submission.id },
+        data: {
+          status: "MANUAL_REVIEW",
+          snapshot_date: new Date(),
+          ai_notes: verification.reason || "Tidak dapat memverifikasi views secara otomatis. Diteruskan ke review manual.",
+          likes: verification.likes ?? 0,
+          comments: verification.comments ?? 0,
+        },
+      });
+
+      return NextResponse.json({
+        status: "MANUAL_REVIEW",
+        message: verification.reason || "Views video tidak dapat diverifikasi secara otomatis. Submission diteruskan ke review manual.",
+      });
     }
+
+    const liveViews = verification.views;
+    const stats = { 
+      views: liveViews, 
+      likes: verification.likes ?? 0, 
+      comments: verification.comments ?? 0, 
+      caption: verification.caption || "" 
+    };
 
     const deltaViews = liveViews - submission.validated_views;
     
@@ -129,6 +141,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         return "YOUTUBE";
       };
       const campaignPlatform = detectPlatform(submission.campaign.video_url);
+      const { scrapeSocialVideo } = require("@/lib/scrapers");
       const campaignStats = await scrapeSocialVideo(submission.campaign.video_url, campaignPlatform);
       campaignTitle = campaignStats.caption || "";
       console.log(`[AI AUDIT] Scraped Brand Campaign Title: "${campaignTitle}"`);

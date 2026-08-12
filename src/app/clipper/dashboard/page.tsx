@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import WithdrawButton from "./WithdrawButton";
 import ClaimButton from "./ClaimButton";
+import SocialConnectionsCard from "./SocialConnectionsCard";
 import {
   IconEye, IconWallet, IconVideo,
   IconBolt, IconArrowRight, IconLink
@@ -110,6 +111,9 @@ export default async function ClipperDashboard() {
           )}
         </div>
       </div>
+
+      {/* ── Social Connections ──────────────────────── */}
+      <SocialConnectionsCard />
 
       {/* ── Submission Table ────────────────────────── */}
       <div className="space-y-3">

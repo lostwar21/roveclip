@@ -51,9 +51,10 @@ model User {
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 
-  campaigns      Campaign[]
-  submissions    Submission[]
-  transactions   TransactionLedger[]
+  campaigns          Campaign[]
+  submissions        Submission[]
+  transactions       TransactionLedger[]
+  social_connections SocialConnection[]
 }
 
 model Campaign {
@@ -96,9 +97,10 @@ model Submission {
   created_at      DateTime         @default(now())
   updated_at      DateTime         @updatedAt
 
-  campaign        Campaign         @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
-  clipper         User             @relation(fields: [clipper_id], references: [id], onDelete: Cascade)
-  transactions    TransactionLedger[]
+  campaign               Campaign               @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
+  clipper                User                   @relation(fields: [clipper_id], references: [id], onDelete: Cascade)
+  transactions           TransactionLedger[]
+  verification_snapshots VerificationSnapshot[]
 
   @@index([campaign_id])
   @@index([clipper_id])
@@ -119,4 +121,49 @@ model TransactionLedger {
   @@index([user_id])
   @@index([reference_id])
   @@index([type])
+}
+
+model SocialConnection {
+  id                 String    @id @default(uuid()) @db.Uuid
+  user_id            String    @db.Uuid
+  platform           Platform
+
+  platform_user_id   String
+  username           String?
+
+  access_token_enc   String
+  token_expires_at   DateTime?
+  scopes             String?
+
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([platform, platform_user_id])
+  @@index([user_id, platform])
+}
+
+model VerificationSnapshot {
+  id                  String   @id @default(uuid()) @db.Uuid
+  submission_id       String   @db.Uuid
+
+  source              String
+  status              String
+
+  media_id            String?
+  owner_verified      Boolean
+
+  views               Int?
+  likes               Int?
+  comments            Int?
+  reach               Int?
+
+  checked_at          DateTime @default(now())
+  metadata            Json?
+
+  submission Submission @relation(fields: [submission_id], references: [id], onDelete: Cascade)
+  
+  @@index([submission_id])
+  @@index([checked_at])
 }
