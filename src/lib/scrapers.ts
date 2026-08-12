@@ -1,8 +1,14 @@
-interface ScrapedStats {
-  views: number;
-  likes: number;
-  comments: number;
+export interface ScrapedStats {
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
   caption?: string;
+  verificationStatus:
+    | "VERIFIED"
+    | "UNAVAILABLE"
+    | "LOGIN_REQUIRED"
+    | "NOT_FOUND";
+  source: "PUBLIC_HTML" | "INSTAGRAM_API";
 }
 
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -19,19 +25,19 @@ export async function scrapeTikTok(url: string): Promise<ScrapedStats> {
       }
     });
 
-    if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+    if (!res.ok) {
+       return { views: null, likes: null, comments: null, verificationStatus: "NOT_FOUND", source: "PUBLIC_HTML" };
+    }
     const html = await res.text();
 
-    // Strategy 1: Look for playCount directly in the raw HTML string
     const playCountMatch = html.match(/"playCount":\s*(\d+)/i) || html.match(/"views":\s*(\d+)/i);
     const diggCountMatch = html.match(/"diggCount":\s*(\d+)/i) || html.match(/"likes":\s*(\d+)/i);
     const commentCountMatch = html.match(/"commentCount":\s*(\d+)/i) || html.match(/"comments":\s*(\d+)/i);
 
-    const views = playCountMatch ? parseInt(playCountMatch[1], 10) : 0;
-    const likes = diggCountMatch ? parseInt(diggCountMatch[1], 10) : 0;
-    const comments = commentCountMatch ? parseInt(commentCountMatch[1], 10) : 0;
+    let views = playCountMatch ? parseInt(playCountMatch[1], 10) : 0;
+    let likes = diggCountMatch ? parseInt(diggCountMatch[1], 10) : 0;
+    let comments = commentCountMatch ? parseInt(commentCountMatch[1], 10) : 0;
 
-    // Strategy 2: Universal Data Rehydration parser (TikTok's built-in state JSON)
     if (views === 0) {
       const rehydrationMatch = html.match(/__UNIVERSAL_DATA_FOR_REHYDRATION__\s*=\s*(\{.*?\});/);
       if (rehydrationMatch) {
@@ -39,25 +45,26 @@ export async function scrapeTikTok(url: string): Promise<ScrapedStats> {
           const data = JSON.parse(rehydrationMatch[1]);
           const videoData = data.__DEFAULT_SCOPE__?.['webapp.video-detail']?.itemInfo?.itemStruct?.stats;
           if (videoData) {
-            return {
-              views: videoData.playCount || 0,
-              likes: videoData.diggCount || 0,
-              comments: videoData.commentCount || 0,
-              caption: data.__DEFAULT_SCOPE__?.['webapp.video-detail']?.itemInfo?.itemStruct?.desc || ""
-            };
+            views = videoData.playCount || views;
+            likes = videoData.diggCount || likes;
+            comments = videoData.commentCount || comments;
           }
         } catch (e) {
-          console.error("Failed to parse TikTok UNIVERSAL_DATA JSON:", e);
+          // ignore
         }
       }
     }
 
     const titleMatch = html.match(/<title>(.*?)<\/title>/i);
     const caption = titleMatch ? titleMatch[1] : "";
-    return { views, likes, comments, caption };
+
+    if (views > 0) {
+      return { views, likes, comments, caption, verificationStatus: "VERIFIED", source: "PUBLIC_HTML" };
+    }
+    
+    return { views: null, likes, comments, caption, verificationStatus: "UNAVAILABLE", source: "PUBLIC_HTML" };
   } catch (error) {
-    console.error("Error scraping TikTok:", error);
-    throw new Error("Unable to parse TikTok video statistics from internet.");
+    return { views: null, likes: null, comments: null, verificationStatus: "UNAVAILABLE", source: "PUBLIC_HTML" };
   }
 }
 
@@ -70,14 +77,13 @@ export async function scrapeYouTube(url: string): Promise<ScrapedStats> {
       }
     });
 
-    if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+    if (!res.ok) {
+       return { views: null, likes: null, comments: null, verificationStatus: "NOT_FOUND", source: "PUBLIC_HTML" };
+    }
     const html = await res.text();
 
-    // Strategy 1: Meta tags (standard SEO / crawler optimization)
     const metaViewsMatch = html.match(/<meta\s+itemprop="interactionCount"\s+content="(\d+)"/i) ||
                            html.match(/<meta\s+content="(\d+)"\s+itemprop="interactionCount"/i);
-    
-    // Strategy 2: YT Initial Data structure
     const ytInitialDataMatch = html.match(/"viewCount":"(\d+)"/i);
 
     const views = metaViewsMatch 
@@ -89,10 +95,14 @@ export async function scrapeYouTube(url: string): Promise<ScrapedStats> {
 
     const titleMatch = html.match(/<title>(.*?)<\/title>/i);
     const caption = titleMatch ? titleMatch[1] : "";
-    return { views, likes, comments: 0, caption };
+    
+    if (views > 0) {
+      return { views, likes, comments: 0, caption, verificationStatus: "VERIFIED", source: "PUBLIC_HTML" };
+    }
+
+    return { views: null, likes, comments: 0, caption, verificationStatus: "UNAVAILABLE", source: "PUBLIC_HTML" };
   } catch (error) {
-    console.error("Error scraping YouTube:", error);
-    throw new Error("Unable to parse YouTube video statistics from internet.");
+    return { views: null, likes: null, comments: null, verificationStatus: "UNAVAILABLE", source: "PUBLIC_HTML" };
   }
 }
 
@@ -101,56 +111,77 @@ export async function scrapeInstagram(url: string): Promise<ScrapedStats> {
     const res = await fetch(url, {
       headers: {
         "User-Agent": USER_AGENT,
-        "Accept-Language": "en-US,en;q=0.9"
-      }
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+      redirect: "follow",
+      cache: "no-store",
     });
 
-    if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+    if (!res.ok) {
+      return { views: null, likes: null, comments: null, verificationStatus: "NOT_FOUND", source: "PUBLIC_HTML" };
+    }
+
     const html = await res.text();
 
-    // Strategy 1: Open Graph tags / meta description which usually contains "Likes, Comments - Author on Instagram: Caption"
-    const metaDescMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i) || html.match(/<meta\s+name="description"\s+content="([^"]+)"/i);
-    
-    let likes = 0;
-    let comments = 0;
-    let views = 0; // IG often doesn't show views on og meta, might just be likes.
-
-    if (metaDescMatch) {
-      const desc = metaDescMatch[1].replace(/,/g, ''); // "1000 Likes 20 Comments - Name on Instagram"
-      const likesMatch = desc.match(/([\d\.]+)\s+Likes/i);
-      const commentsMatch = desc.match(/([\d\.]+)\s+Comments/i);
-      if (likesMatch) likes = parseInt(likesMatch[1].replace(/\./g, ''), 10);
-      if (commentsMatch) comments = parseInt(commentsMatch[1].replace(/\./g, ''), 10);
-    }
-
-    // Instagram video views might be hidden in sharedData json if not login walled
-    const sharedDataMatch = html.match(/window\._sharedData\s*=\s*(\{.*?\});/);
-    if (sharedDataMatch) {
-        try {
-            const data = JSON.parse(sharedDataMatch[1]);
-            const post = data.entry_data?.PostPage?.[0]?.graphql?.shortcode_media;
-            if (post) {
-               views = post.video_view_count || views;
-               likes = post.edge_media_preview_like?.count || likes;
-               comments = post.edge_media_to_parent_comment?.count || comments;
-            }
-        } catch (e) {
-             // Ignore json parse error, fall back to meta tags
-        }
-    }
+    const metaDescMatch =
+      html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i) ||
+      html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i);
 
     const titleMatch = html.match(/<title>(.*?)<\/title>/i);
-    const caption = titleMatch ? titleMatch[1] : (metaDescMatch ? metaDescMatch[1] : "");
 
-    // Require at least views or likes to consider it a successful scrape, otherwise assume login wall hit
-    if (views === 0 && likes === 0) {
-        throw new Error("Data tersembunyi oleh Login Wall Instagram.");
+    let likes: number | null = null;
+    let comments: number | null = null;
+    let views: number | null = null;
+
+    if (metaDescMatch) {
+      const desc = metaDescMatch[1];
+      const likesMatch = desc.match(/([\d,.]+)\s+Likes?/i);
+      const commentsMatch = desc.match(/([\d,.]+)\s+Comments?/i);
+
+      if (likesMatch) {
+        likes = Number(likesMatch[1].replace(/[,.]/g, ""));
+      }
+
+      if (commentsMatch) {
+        comments = Number(commentsMatch[1].replace(/[,.]/g, ""));
+      }
     }
 
-    return { views: views > 0 ? views : likes, likes, comments, caption }; // fallback views to likes if views not found
+    const sharedDataMatch = html.match(/window\._sharedData\s*=\s*(\{[\s\S]*?\});/);
+
+    if (sharedDataMatch) {
+      try {
+        const data = JSON.parse(sharedDataMatch[1]);
+        const post = data.entry_data?.PostPage?.[0]?.graphql?.shortcode_media;
+
+        if (post) {
+          views = post.video_view_count ?? null;
+          likes = post.edge_media_preview_like?.count ?? likes;
+          comments = post.edge_media_to_parent_comment?.count ?? comments;
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    const caption = titleMatch?.[1] ?? metaDescMatch?.[1] ?? "";
+
+    if (views !== null && views > 0) {
+      return { views, likes, comments, caption, verificationStatus: "VERIFIED", source: "PUBLIC_HTML" };
+    }
+
+    return {
+      views: null,
+      likes,
+      comments,
+      caption,
+      verificationStatus: likes !== null ? "LOGIN_REQUIRED" : "UNAVAILABLE",
+      source: "PUBLIC_HTML",
+    };
   } catch (error) {
-    console.error("Error scraping Instagram:", error);
-    throw new Error("Unable to parse Instagram video statistics. Platform requires login or API access.");
+    console.error("Instagram verification failed:", error);
+    return { views: null, likes: null, comments: null, verificationStatus: "UNAVAILABLE", source: "PUBLIC_HTML" };
   }
 }
 
@@ -161,7 +192,6 @@ export async function scrapeSocialVideo(url: string, platform: string): Promise<
   } else if (plat === 'YOUTUBE') {
     return scrapeYouTube(url);
   } else {
-    // INSTAGRAM
     return scrapeInstagram(url);
   }
 }

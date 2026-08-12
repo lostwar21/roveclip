@@ -19,12 +19,28 @@ export async function GET(req: Request) {
     }
 
     const stats = await scrapeSocialVideo(url, platform);
-    return NextResponse.json(stats);
+
+    if (platform === "INSTAGRAM" && stats.verificationStatus !== "VERIFIED") {
+      return NextResponse.json({
+        ok: true,
+        status: stats.verificationStatus,
+        verified: false,
+        message:
+          "Instagram tidak memberikan metrik views pada request publik ini. Gunakan koneksi akun Instagram atau lanjutkan ke review manual.",
+        stats,
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      status: stats.verificationStatus ?? "VERIFIED",
+      verified: true,
+      stats,
+    });
   } catch (error: any) {
-    // We log it as a warning/info rather than a critical stacktrace error, since scraper blocks are expected
-    console.warn("Admin view checking info:", error.message);
+    console.error("Admin view checking error:", error);
     return NextResponse.json({ 
-      error: error.message || "Gagal menarik data live dari internet. Pastikan video publik." 
-    }, { status: 422 });
+      error: error.message || "Gagal menarik data live dari internet." 
+    }, { status: 500 });
   }
 }

@@ -30,6 +30,27 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     let stats: any = null;
     try {
       stats = await scrapeSocialVideo(submission.social_url, submission.platform);
+
+      if (stats.views === null) {
+        await prisma.submission.update({
+          where: { id: submission.id },
+          data: {
+            status: "MANUAL_REVIEW",
+            snapshot_date: new Date(),
+            ai_notes:
+              "Platform tidak menyediakan metrik views yang dapat diverifikasi secara otomatis pada request publik ini.",
+            likes: stats.likes ?? 0,
+            comments: stats.comments ?? 0,
+          },
+        });
+
+        return NextResponse.json({
+          status: "MANUAL_REVIEW",
+          message:
+            "Views video tidak dapat diverifikasi secara otomatis. Submission diteruskan ke review manual.",
+        });
+      }
+
       liveViews = stats.views;
     } catch (err) {
       return NextResponse.json({ 

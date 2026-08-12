@@ -14,7 +14,12 @@ export default function LiveCheckButton({ url, platform }: { url: string, platfo
       const res = await fetch(`/api/admin/check-views?url=${encodeURIComponent(url)}&platform=${platform}`);
       const data = await res.json();
       if (res.ok) {
-        setViews(data.views);
+        const fetchedViews = data.stats?.views ?? data.views;
+        if (fetchedViews !== null && fetchedViews !== undefined) {
+          setViews(fetchedViews);
+        } else {
+          toast.error(data.message || "Views tidak dapat diverifikasi secara otomatis (Review Manual diperlukan).");
+        }
       } else {
         toast.error(data.error || "Failed to fetch views");
       }

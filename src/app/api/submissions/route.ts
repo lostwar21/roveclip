@@ -153,8 +153,8 @@ export async function POST(req: Request) {
         status: finalStatus,
         relevance_score: aiResult.relevance_score,
         ai_notes: aiNotes,
-        likes: clipperStats.likes,
-        comments: clipperStats.comments,
+        likes: clipperStats.likes ?? 0,
+        comments: clipperStats.comments ?? 0,
         author_name,
         author_url
       }
