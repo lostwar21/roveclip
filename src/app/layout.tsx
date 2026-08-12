@@ -16,8 +16,30 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "RoveClip — Platform Distribusi Konten Video Pendek",
-  description: "Platform distribusi video pendek terbaik untuk brand dan clipper profesional. Hasilkan uang dari konten TikTok, YouTube Shorts, dan Instagram Reels.",
+  title: "RoveClip | Ubah Views Menjadi Penghasilan",
+  description: "Platform distribusi video pendek berbasis AI untuk brand dan clipper profesional. Hasilkan uang dari TikTok, YouTube Shorts, dan Reels dengan views terverifikasi.",
+  keywords: ["RoveClip", "Clipper", "Video Pendek", "TikTok Affiliate", "Make Money Online", "Brand Campaign", "AI Views Verification"],
+  openGraph: {
+    title: "RoveClip | Ubah Views Menjadi Penghasilan",
+    description: "Platform distribusi video pendek berbasis performa (CPM).",
+    url: "https://roveclip.com",
+    siteName: "RoveClip",
+    images: [
+      {
+        url: "/logo.png",
+        width: 800,
+        height: 600,
+      },
+    ],
+    locale: "id_ID",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "RoveClip | Platform Distribusi Video Pendek",
+    description: "Hasilkan uang dari views TikTok dan Reels. 100% Anti-Fraud AI.",
+    images: ["/logo.png"],
+  },
 };
 
 export default async function RootLayout({

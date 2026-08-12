@@ -20,8 +20,11 @@ export async function GET(req: Request) {
 
     const stats = await scrapeSocialVideo(url, platform);
     return NextResponse.json(stats);
-  } catch (error) {
-    console.error("Admin view checking error:", error);
-    return NextResponse.json({ error: "Gagal menarik data live dari internet. Pastikan video publik." }, { status: 500 });
+  } catch (error: any) {
+    // We log it as a warning/info rather than a critical stacktrace error, since scraper blocks are expected
+    console.warn("Admin view checking info:", error.message);
+    return NextResponse.json({ 
+      error: error.message || "Gagal menarik data live dari internet. Pastikan video publik." 
+    }, { status: 422 });
   }
 }
