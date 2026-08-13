@@ -161,6 +161,7 @@ model VerificationSnapshot {
 
   checked_at          DateTime @default(now())
   metadata            Json?
+  reason              String?
 
   submission Submission @relation(fields: [submission_id], references: [id], onDelete: Cascade)
   
